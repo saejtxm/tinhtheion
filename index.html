@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mô Hình Tinh Thể NaCl Tối Giản</title>
+    <!-- Tải Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Tải Three.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- Tải OrbitControls để xoay mô hình -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <style>
+        /* Thiết lập body và canvas để chiếm toàn bộ màn hình */
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: 'Inter', sans-serif;
+            background-color: #0d1117; /* Nền tối */
+            color: #E5E7EB;
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="container"></div>
+
+    <script type="module">
+        // Biến toàn cục để lưu trữ các thành phần Three.js
+        let scene, camera, renderer, controls;
+        let container = document.getElementById('container');
+
+        // Hằng số cho mô hình
+        const LATTICE_SPACING = 5; // Khoảng cách giữa các ion (a/2)
+        const ION_COUNT = 4; // Số lượng ion trên một cạnh (tạo lưới 4x4x4)
+        const Na_COLOR = 0x2563EB; // Xanh dương (Na+)
+        const Cl_COLOR = 0x10B981; // Xanh lá (Cl-)
+        const BOND_COLOR = 0x9CA3AF; // Xám
+        const Na_RADIUS = 0.8; // Bán kính Na+ nhỏ hơn
+        const Cl_RADIUS = 1.2; // Bán kính Cl- lớn hơn
+        const BOND_RADIUS = 0.15;
+
+        /**
+         * Hàm khởi tạo Three.js: Scene, Camera, Renderer, Controls
+         */
+        function init() {
+            // 1. Scene
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x0d1117);
+
+            // 2. Camera
+            camera = new THREE.PerspectiveCamera(
+                75, // Field of view
+                window.innerWidth / window.innerHeight, // Aspect Ratio
+                0.1, // Near
+                1000 // Far
+            );
+            // Đặt camera ở vị trí ban đầu tốt
+            camera.position.set(30, 10, 30);
+            
+            // 3. Renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            container.appendChild(renderer.domElement);
+
+            // 4. Controls (Tương tác xoay)
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true; 
+            controls.dampingFactor = 0.05;
+            controls.rotateSpeed = 0.5;
+            
+            // Cấu hình cố định góc nhìn theo yêu cầu:
+            controls.enableZoom = false; // Tắt phóng to/thu nhỏ
+            controls.enablePan = false;  // Tắt dịch chuyển góc nhìn
+
+            // 5. Thêm ánh sáng
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
+            scene.add(ambientLight);
+
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 1.0);
+            directionalLight.position.set(5, 10, 7.5);
+            scene.add(directionalLight);
+
+            // 6. Tạo mô hình tinh thể
+            createCrystalStructure();
+
+            // 7. Lắng nghe sự kiện thay đổi kích thước cửa sổ
+            window.addEventListener('resize', onWindowResize, false);
+
+            // Bắt đầu vòng lặp hoạt hình
+            animate();
+        }
+
+        /**
+         * Tạo mô hình tinh thể NaCl (Lập phương tâm mặt - Rock Salt)
+         */
+        function createCrystalStructure() {
+            const group = new THREE.Group();
+            // Tính toán vị trí bắt đầu để mô hình nằm giữa (tâm lưới)
+            const startPos = -((ION_COUNT - 1) * LATTICE_SPACING) / 2;
+
+            // Vòng lặp để tạo các ion
+            for (let x = 0; x < ION_COUNT; x++) {
+                for (let y = 0; y < ION_COUNT; y++) {
+                    for (let z = 0; z < ION_COUNT; z++) {
+                        
+                        // Tính toán tọa độ không gian
+                        const px = startPos + x * LATTICE_SPACING;
+                        const py = startPos + y * LATTICE_SPACING;
+                        const pz = startPos + z * LATTICE_SPACING;
+
+                        // Xác định loại ion: tổng chỉ số chẵn/lẻ xen kẽ
+                        const isSodium = (x + y + z) % 2 === 0;
+
+                        // 1. Tạo Ion (Sphere)
+                        const radius = isSodium ? Na_RADIUS : Cl_RADIUS;
+                        const color = isSodium ? Na_COLOR : Cl_COLOR;
+                        const ionGeometry = new THREE.SphereGeometry(radius, 32, 32);
+                        // Sử dụng MeshPhysicalMaterial cho độ bóng tốt hơn
+                        const ionMaterial = new THREE.MeshPhysicalMaterial({ 
+                            color: color, 
+                            metalness: 0.1, 
+                            roughness: 0.3,
+                            clearcoat: 0.5
+                        });
+                        const ionMesh = new THREE.Mesh(ionGeometry, ionMaterial);
+                        ionMesh.position.set(px, py, pz);
+                        group.add(ionMesh);
+
+                        // 2. Tạo Liên kết (Bonds - Cylinders)
+                        
+                        // Chỉ tạo liên kết về phía +X, +Y, +Z để tránh trùng lặp
+                        
+                        // Liên kết theo trục X
+                        if (x < ION_COUNT - 1) {
+                            const bondMesh = createBond(
+                                new THREE.Vector3(px, py, pz),
+                                new THREE.Vector3(px + LATTICE_SPACING, py, pz)
+                            );
+                            group.add(bondMesh);
+                        }
+                        
+                        // Liên kết theo trục Y
+                        if (y < ION_COUNT - 1) {
+                            const bondMesh = createBond(
+                                new THREE.Vector3(px, py, pz),
+                                new THREE.Vector3(px, py + LATTICE_SPACING, pz)
+                            );
+                            group.add(bondMesh);
+                        }
+
+                        // Liên kết theo trục Z
+                        if (z < ION_COUNT - 1) {
+                            const bondMesh = createBond(
+                                new THREE.Vector3(px, py, pz),
+                                new THREE.Vector3(px, py, pz + LATTICE_SPACING)
+                            );
+                            group.add(bondMesh);
+                        }
+                    }
+                }
+            }
+
+            scene.add(group);
+        }
+
+        /**
+         * Hàm tạo liên kết (Cylinder) giữa hai điểm
+         * @param {THREE.Vector3} start - Điểm bắt đầu
+         * @param {THREE.Vector3} end - Điểm kết thúc
+         * @returns {THREE.Mesh} Mesh của hình trụ (liên kết)
+         */
+        function createBond(start, end) {
+            const direction = new THREE.Vector3().subVectors(end, start);
+            const length = direction.length();
+
+            const geometry = new THREE.CylinderGeometry(BOND_RADIUS, BOND_RADIUS, length, 8);
+            const material = new THREE.MeshPhongMaterial({ color: BOND_COLOR, opacity: 0.7, transparent: true });
+            const mesh = new THREE.Mesh(geometry, material);
+
+            // Đặt vị trí chính giữa
+            mesh.position.addVectors(start, end).divideScalar(2);
+
+            // Xoay hình trụ để nó hướng từ start đến end
+            mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), direction.normalize());
+
+            return mesh;
+        }
+
+
+        /**
+         * Xử lý thay đổi kích thước cửa sổ
+         */
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        /**
+         * Vòng lặp hoạt hình (Animation Loop)
+         */
+        function animate() {
+            requestAnimationFrame(animate);
+
+            // Cập nhật controls
+            controls.update();
+
+            // Render cảnh
+            renderer.render(scene, camera);
+        }
+
+        // Bắt đầu ứng dụng khi cửa sổ tải xong
+        window.onload = init;
+    </script>
+</body>
+</html>
+
