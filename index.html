@@ -2,27 +2,42 @@
 <html lang="vi">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- Cấu hình Viewport quan trọng cho hiển thị trên di động/iframe -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    
+    <!-- --- KHẮC PHỤC LỖI NHÚNG (EMBED FIX) --- -->
+    <!-- Cho phép nhúng trang web này vào bất kỳ đâu (Canva, PowerPoint, v.v.) -->
+    <meta http-equiv="Content-Security-Policy" content="frame-ancestors *;">
+    
     <title>Mô Hình Tinh Thể NaCl Tối Giản</title>
+
     <!-- Tải Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Tải Three.js -->
+
+    <!-- Tải Three.js (Bản Global - không dùng Module để tránh lỗi CORS trong iFrame) -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <!-- Tải OrbitControls để xoay mô hình -->
+    
+    <!-- Tải OrbitControls (Phiên bản tương thích với biến toàn cục THREE) -->
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
     <style>
-        /* Thiết lập body và canvas để chiếm toàn bộ màn hình */
-        body {
+        /* Reset CSS để đảm bảo full màn hình trong khung nhúng */
+        body, html {
             margin: 0;
-            overflow: hidden;
-            font-family: 'Inter', sans-serif;
-            background-color: #0d1117; /* Nền tối */
-            color: #E5E7EB;
-        }
-        canvas {
-            display: block;
+            padding: 0;
             width: 100%;
             height: 100%;
+            overflow: hidden; /* Ẩn thanh cuộn */
+            background-color: #0d1117;
+            font-family: 'Inter', sans-serif;
+        }
+        #container {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+        canvas {
+            display: block; /* Loại bỏ khoảng trắng thừa của thẻ inline */
         }
     </style>
 </head>
@@ -30,194 +45,151 @@
 
     <div id="container"></div>
 
-    <script type="module">
-        // Biến toàn cục để lưu trữ các thành phần Three.js
+    <!-- Script chính: Không dùng type="module" -->
+    <script>
+        // --- CẤU HÌNH ---
+        const CONFIG = {
+            LATTICE_SPACING: 5,
+            ION_COUNT: 4,
+            COLORS: {
+                Na: 0x2563EB, // Xanh dương
+                Cl: 0x10B981, // Xanh lá
+                Bond: 0x9CA3AF, // Xám
+                Background: 0x0d1117
+            },
+            RADIUS: {
+                Na: 0.8,
+                Cl: 1.2,
+                Bond: 0.15
+            }
+        };
+
+        // Biến toàn cục
         let scene, camera, renderer, controls;
         let container = document.getElementById('container');
 
-        // Hằng số cho mô hình
-        const LATTICE_SPACING = 5; // Khoảng cách giữa các ion (a/2)
-        const ION_COUNT = 4; // Số lượng ion trên một cạnh (tạo lưới 4x4x4)
-        const Na_COLOR = 0x2563EB; // Xanh dương (Na+)
-        const Cl_COLOR = 0x10B981; // Xanh lá (Cl-)
-        const BOND_COLOR = 0x9CA3AF; // Xám
-        const Na_RADIUS = 0.8; // Bán kính Na+ nhỏ hơn
-        const Cl_RADIUS = 1.2; // Bán kính Cl- lớn hơn
-        const BOND_RADIUS = 0.15;
-
-        /**
-         * Hàm khởi tạo Three.js: Scene, Camera, Renderer, Controls
-         */
+        // Hàm khởi tạo
         function init() {
             // 1. Scene
             scene = new THREE.Scene();
-            scene.background = new THREE.Color(0x0d1117);
+            scene.background = new THREE.Color(CONFIG.COLORS.Background);
 
             // 2. Camera
-            camera = new THREE.PerspectiveCamera(
-                75, // Field of view
-                window.innerWidth / window.innerHeight, // Aspect Ratio
-                0.1, // Near
-                1000 // Far
-            );
-            // Đặt camera ở vị trí ban đầu tốt
-            camera.position.set(30, 10, 30);
-            
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(30, 20, 30); // Góc nhìn từ trên cao xuống một chút
+
             // 3. Renderer
-            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio); // Giúp hình ảnh sắc nét trên màn hình Retina
             container.appendChild(renderer.domElement);
 
-            // 4. Controls (Tương tác xoay)
-            controls = new THREE.OrbitControls(camera, renderer.domElement);
-            controls.enableDamping = true; 
-            controls.dampingFactor = 0.05;
-            controls.rotateSpeed = 0.5;
-            
-            // Cấu hình cố định góc nhìn theo yêu cầu:
-            controls.enableZoom = false; // Tắt phóng to/thu nhỏ
-            controls.enablePan = false;  // Tắt dịch chuyển góc nhìn
+            // 4. Controls
+            // Kiểm tra xem THREE.OrbitControls có tồn tại không (do tải script global)
+            if (THREE.OrbitControls) {
+                controls = new THREE.OrbitControls(camera, renderer.domElement);
+                controls.enableDamping = true;
+                controls.dampingFactor = 0.05;
+                controls.autoRotate = true; // Tự động xoay nhẹ để tạo hiệu ứng động
+                controls.autoRotateSpeed = 2.0;
+            } else {
+                console.warn("OrbitControls chưa được tải đúng cách.");
+            }
 
-            // 5. Thêm ánh sáng
-            const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
+            // 5. Ánh sáng
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
             scene.add(ambientLight);
 
-            const directionalLight = new THREE.DirectionalLight(0xffffff, 1.0);
-            directionalLight.position.set(5, 10, 7.5);
-            scene.add(directionalLight);
+            const dirLight = new THREE.DirectionalLight(0xffffff, 1);
+            dirLight.position.set(10, 20, 10);
+            scene.add(dirLight);
+            
+            const backLight = new THREE.DirectionalLight(0xffffff, 0.5);
+            backLight.position.set(-10, -10, -10);
+            scene.add(backLight);
 
-            // 6. Tạo mô hình tinh thể
-            createCrystalStructure();
+            // 6. Tạo vật thể
+            createStructure();
 
-            // 7. Lắng nghe sự kiện thay đổi kích thước cửa sổ
+            // 7. Event Resize
             window.addEventListener('resize', onWindowResize, false);
 
-            // Bắt đầu vòng lặp hoạt hình
+            // 8. Bắt đầu loop
             animate();
         }
 
-        /**
-         * Tạo mô hình tinh thể NaCl (Lập phương tâm mặt - Rock Salt)
-         */
-        function createCrystalStructure() {
+        function createStructure() {
             const group = new THREE.Group();
-            // Tính toán vị trí bắt đầu để mô hình nằm giữa (tâm lưới)
-            const startPos = -((ION_COUNT - 1) * LATTICE_SPACING) / 2;
+            const offset = -((CONFIG.ION_COUNT - 1) * CONFIG.LATTICE_SPACING) / 2;
 
-            // Vòng lặp để tạo các ion
-            for (let x = 0; x < ION_COUNT; x++) {
-                for (let y = 0; y < ION_COUNT; y++) {
-                    for (let z = 0; z < ION_COUNT; z++) {
+            for (let x = 0; x < CONFIG.ION_COUNT; x++) {
+                for (let y = 0; y < CONFIG.ION_COUNT; y++) {
+                    for (let z = 0; z < CONFIG.ION_COUNT; z++) {
                         
-                        // Tính toán tọa độ không gian
-                        const px = startPos + x * LATTICE_SPACING;
-                        const py = startPos + y * LATTICE_SPACING;
-                        const pz = startPos + z * LATTICE_SPACING;
+                        const px = offset + x * CONFIG.LATTICE_SPACING;
+                        const py = offset + y * CONFIG.LATTICE_SPACING;
+                        const pz = offset + z * CONFIG.LATTICE_SPACING;
 
-                        // Xác định loại ion: tổng chỉ số chẵn/lẻ xen kẽ
+                        // Xác định loại Ion
                         const isSodium = (x + y + z) % 2 === 0;
+                        const radius = isSodium ? CONFIG.RADIUS.Na : CONFIG.RADIUS.Cl;
+                        const color = isSodium ? CONFIG.COLORS.Na : CONFIG.COLORS.Cl;
 
-                        // 1. Tạo Ion (Sphere)
-                        const radius = isSodium ? Na_RADIUS : Cl_RADIUS;
-                        const color = isSodium ? Na_COLOR : Cl_COLOR;
-                        const ionGeometry = new THREE.SphereGeometry(radius, 32, 32);
-                        // Sử dụng MeshPhysicalMaterial cho độ bóng tốt hơn
-                        const ionMaterial = new THREE.MeshPhysicalMaterial({ 
-                            color: color, 
-                            metalness: 0.1, 
-                            roughness: 0.3,
-                            clearcoat: 0.5
+                        // Mesh Ion
+                        const geometry = new THREE.SphereGeometry(radius, 32, 32);
+                        const material = new THREE.MeshPhysicalMaterial({
+                            color: color,
+                            metalness: 0.1,
+                            roughness: 0.2,
+                            clearcoat: 0.8
                         });
-                        const ionMesh = new THREE.Mesh(ionGeometry, ionMaterial);
-                        ionMesh.position.set(px, py, pz);
-                        group.add(ionMesh);
+                        const atom = new THREE.Mesh(geometry, material);
+                        atom.position.set(px, py, pz);
+                        group.add(atom);
 
-                        // 2. Tạo Liên kết (Bonds - Cylinders)
-                        
-                        // Chỉ tạo liên kết về phía +X, +Y, +Z để tránh trùng lặp
-                        
-                        // Liên kết theo trục X
-                        if (x < ION_COUNT - 1) {
-                            const bondMesh = createBond(
-                                new THREE.Vector3(px, py, pz),
-                                new THREE.Vector3(px + LATTICE_SPACING, py, pz)
-                            );
-                            group.add(bondMesh);
-                        }
-                        
-                        // Liên kết theo trục Y
-                        if (y < ION_COUNT - 1) {
-                            const bondMesh = createBond(
-                                new THREE.Vector3(px, py, pz),
-                                new THREE.Vector3(px, py + LATTICE_SPACING, pz)
-                            );
-                            group.add(bondMesh);
-                        }
-
-                        // Liên kết theo trục Z
-                        if (z < ION_COUNT - 1) {
-                            const bondMesh = createBond(
-                                new THREE.Vector3(px, py, pz),
-                                new THREE.Vector3(px, py, pz + LATTICE_SPACING)
-                            );
-                            group.add(bondMesh);
-                        }
+                        // Tạo liên kết (Bonds)
+                        if (x < CONFIG.ION_COUNT - 1) createBond(group, px, py, pz, px + CONFIG.LATTICE_SPACING, py, pz);
+                        if (y < CONFIG.ION_COUNT - 1) createBond(group, px, py, pz, px, py + CONFIG.LATTICE_SPACING, pz);
+                        if (z < CONFIG.ION_COUNT - 1) createBond(group, px, py, pz, px, py, pz + CONFIG.LATTICE_SPACING);
                     }
                 }
             }
-
             scene.add(group);
         }
 
-        /**
-         * Hàm tạo liên kết (Cylinder) giữa hai điểm
-         * @param {THREE.Vector3} start - Điểm bắt đầu
-         * @param {THREE.Vector3} end - Điểm kết thúc
-         * @returns {THREE.Mesh} Mesh của hình trụ (liên kết)
-         */
-        function createBond(start, end) {
+        function createBond(group, x1, y1, z1, x2, y2, z2) {
+            const start = new THREE.Vector3(x1, y1, z1);
+            const end = new THREE.Vector3(x2, y2, z2);
             const direction = new THREE.Vector3().subVectors(end, start);
             const length = direction.length();
 
-            const geometry = new THREE.CylinderGeometry(BOND_RADIUS, BOND_RADIUS, length, 8);
-            const material = new THREE.MeshPhongMaterial({ color: BOND_COLOR, opacity: 0.7, transparent: true });
-            const mesh = new THREE.Mesh(geometry, material);
+            const geometry = new THREE.CylinderGeometry(CONFIG.RADIUS.Bond, CONFIG.RADIUS.Bond, length, 8);
+            const material = new THREE.MeshStandardMaterial({ color: CONFIG.COLORS.Bond });
+            const bond = new THREE.Mesh(geometry, material);
 
-            // Đặt vị trí chính giữa
-            mesh.position.addVectors(start, end).divideScalar(2);
-
-            // Xoay hình trụ để nó hướng từ start đến end
-            mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), direction.normalize());
-
-            return mesh;
+            const center = new THREE.Vector3().addVectors(start, end).multiplyScalar(0.5);
+            bond.position.copy(center);
+            
+            // Xoay cylinder theo hướng vector
+            bond.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), direction.normalize());
+            
+            group.add(bond);
         }
 
-
-        /**
-         * Xử lý thay đổi kích thước cửa sổ
-         */
         function onWindowResize() {
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
         }
 
-        /**
-         * Vòng lặp hoạt hình (Animation Loop)
-         */
         function animate() {
             requestAnimationFrame(animate);
-
-            // Cập nhật controls
-            controls.update();
-
-            // Render cảnh
+            if (controls) controls.update();
             renderer.render(scene, camera);
         }
 
-        // Bắt đầu ứng dụng khi cửa sổ tải xong
-        window.onload = init;
+        // Khởi chạy
+        init();
     </script>
 </body>
 </html>
-
